@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Chat</title>
+</head>
+<body>
+    <style type="text/css">
+        body {
+            background-color: bisque;
+        }
+
+        ul {
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+
+        #chat {
+            max-width: 352px;
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        .container {
+            border: 2px solid #dedede;
+            background-color: #f1f1f1;
+            border-radius: 5px;
+            padding: 10px;
+            margin: 10px 0;
+        }
+    </style>
+    <div id="chat">
+        <div>
+            {{ memory }}
+        </div>
+        <ul>
+            <li class="container" v-for="message in messages">{{ message.name }} said:
+                <p>{{ message.mess }}</p>
+            </li>
+        </ul>
+        <div>{{ online }}</div>
+        <div v-if="!isUser">
+            <h3>Enter your name!</h3>
+            <input type="text" v-model="userName">
+            <button @click="connect">Connect</button>
+        </div>
+        <div v-else>
+            <input type="text" v-model="newMessage">
+            <button @click="send">Send</button>
+            <button @click="disconnect">Disconnect</button>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.5.17/dist/vue.js"></script>
+    <script>
+        Vue.filter('disabled', function(val) { return val ? 'disabled': ''});
+        var chatApp = new Vue({
+            el: '#chat',
+            data() {
+                return {
+                    messages: [],
+                    isUser: false,
+                    userName: '',
+                    newMessage: '',
+                    online: false,
+                    memory: {}
+                }
+            },
+            created() {
+            },
+            mounted() {
+                if (localStorage.user) {
+                    this.connect();
+                    this.isUser = true;
+                }
+
+                document.addEventListener('keydown', (event) => {
+                    if (event.code.indexOf('Enter') !== -1) {
+                        this.send();
+                    }
+                })
+            },
+            destroyed() {
+                this.ws.close();
+            },
+            methods: {
+                send() {
+                    var userMes = {
+                        name: JSON.parse(localStorage.user),
+                        mess: this.newMessage
+                    };
+
+                    this.ws.send(JSON.stringify(userMes));
+                    this.newMessage = '';
+                },
+                messageHandler(message) {
+                    try {
+                        // console.log(message.data);
+                        let data = JSON.parse(message.data);
+                        switch(data.type) {
+                            case 'messages':
+                                this.$set(this, 'messages', data.messages);
+                                break;
+                            case 'message':
+                                this.messages.push(JSON.parse(data.message));
+                                break;
+                            case 'memoryInfo':
+                                this.$set(this, 'memory', data.data)
+                        }
+                    } catch (e) {console.error(e)}
+                },
+                disconnect() {
+                    this.ws.close();
+                    localStorage.user = JSON.stringify('');
+                    this.isUser = false;
+                },
+                connect() {
+                    if (this.online && this.isUser) {
+                        return false;
+                    } 
+                    if (this.userName !== '') {
+                        localStorage.user = JSON.stringify(this.userName);
+                        this.isUser = true;
+                        this.userName = '';
+                    }
+
+                    this.ws = new WebSocket('ws://' + location.host.replace(':5000', '') + ':5555');
+                    this.ws.addEventListener('open', () => { this.online = true });
+                    this.ws.addEventListener('close', () => { this.online = false });
+                    this.ws.addEventListener('error', (err) => { console.error(err) });
+                    this.ws.addEventListener('message', this.messageHandler.bind(this));
+                }
+            }
+            
+        })
+    </script>
+</body>
+</html>
